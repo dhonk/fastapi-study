@@ -17,12 +17,12 @@ class User(Base):
         default=None,
     )
 
-    posts: Mapped[list[Post]] = relationship(back_populates="author")
+    posts: Mapped[list[Post]] = relationship(back_populates="author", cascade="all, delete-orphan")
 
     @property
     def image_path(self) -> str:
         if self.image_file:
-            return f"/media/profile_pics/self.image_file"
+            return f"/media/profile_pics/{self.image_file}"
         return "/static/profile_pics/default.jpg"
 
 class Post(Base):
@@ -32,7 +32,7 @@ class Post(Base):
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("userss.id"),
+        ForeignKey("users.id"),
         nullable=False,
         index=True
     )
