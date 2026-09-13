@@ -5,3 +5,7 @@ Jinja2 == 3.1.6
 sqlalchemy
 pydantic[email]
 aiosqlite
+pwdlib[argon2]
+pyjwt
+pydantic-settings
+python-multipart
