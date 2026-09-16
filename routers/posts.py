@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 import models
+from auth import CurrentUser
 from db import get_db
 from schemas import PostCreate, PostResponse, PostUpdate
 
@@ -49,19 +50,19 @@ async def get_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     response_model=PostResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_post(post: PostCreate, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(
-        select(models.User)
-        .where(models.User.id == post.user_id)
-    )
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
+# this now uses dependency injection to handle auth and to know who the current user is
+# how does it work?
+# current_user: CurrentUser -> remember that this is Annotated[models.User, Depends(get_current_user)]
+# remember that FastAPI uses type hints to validate input
+# Annotated in vanilla python just adds metadata to a type hint, but then FastAPI goes through the Depends,
+# sees the dependency, and executes what's inside of the Depends().
+# so in the case of CurrentUser, it sees that it Depends(get_current_user), and sets the current_user param to 
+# the current user using OAuth2.
+async def create_post(post: PostCreate, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
     new_post = models.Post(
         title=post.title,
         content=post.content,
-        user_id=post.user_id,
+        user_id=current_user.id, # user id now comes from CurrentUser instead of request body
     )
 
     db.add(new_post)
@@ -74,7 +75,7 @@ async def create_post(post: PostCreate, db: Annotated[AsyncSession, Depends(get_
         "/{post_id}",
         response_model=PostResponse
     )
-async def update_post_full(post_id: int, post_data: PostCreate, db: Annotated[AsyncSession, Depends(get_db)]):
+async def update_post_full(post_id: int, post_data: PostCreate, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
@@ -84,19 +85,14 @@ async def update_post_full(post_id: int, post_data: PostCreate, db: Annotated[As
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
-    if post_data.user_id != post.user_id:
-        result = await db.execute(
-            select(models.User)
-            .where(models.User.id == post_data.user_id)
-        )
-        user = result.scalars().first()
-
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this post")
+        # why not 401 instead of 403?
+        # 401 = not logged in
+        # 403 = logged in, but not allowed to do
 
     post.title = post_data.title
     post.content = post_data.content
-    post.user_id = post_data.user_id
 
     await db.commit()
     await db.refresh(post, attribute_names=["author"])
@@ -107,7 +103,7 @@ async def update_post_full(post_id: int, post_data: PostCreate, db: Annotated[As
         "/{post_id}",
         response_model=PostResponse
     )
-async def update_post_partial(post_id: int, post_data: PostUpdate, db: Annotated[AsyncSession, Depends(get_db)]):
+async def update_post_partial(post_id: int, post_data: PostUpdate, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
@@ -116,6 +112,9 @@ async def update_post_partial(post_id: int, post_data: PostUpdate, db: Annotated
 
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this post")
 
     update_data = post_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -130,7 +129,7 @@ async def update_post_partial(post_id: int, post_data: PostUpdate, db: Annotated
         "/{post_id}",
         status_code=status.HTTP_204_NO_CONTENT
     )
-async def delete_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def delete_post(post_id: int, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(
         select(models.Post)
         .where(models.Post.id == post_id)
@@ -139,6 +138,9 @@ async def delete_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]
 
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this post")
 
     await db.delete(post)
     await db.commit()
