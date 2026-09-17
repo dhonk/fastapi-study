@@ -10,3 +10,4 @@ pyjwt
 pydantic-settings
 python-multipart
 pillow
+aiosmtplib
