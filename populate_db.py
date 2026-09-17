@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -376,4 +377,4 @@ async def populate() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(populate())
+    asyncio.run(populate(), loop_factory=asyncio.SelectorEventLoop) if sys.platform == "win32" else asyncio.run(populate())

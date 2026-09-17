@@ -11,3 +11,5 @@ pydantic-settings
 python-multipart
 pillow
 aiosmtplib
+psycopg[binary]
+alembic
